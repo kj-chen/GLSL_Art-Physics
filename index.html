@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL 著色器藝術與物理教學 - 互動實驗室</title>
+    <style>
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden; background-color: #000;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        canvas { display: block; width: 100vw; height: 100vh; }
+        
+        /* 採用 Grid 佈局的左側控制面板 */
+        #ui-panel {
+            position: absolute;
+            top: 15px;
+            left: 10px;
+            width: 320px; 
+            background: rgba(0, 0, 0, 0.85);
+            color: white;
+            padding: 15px;
+            border-radius: 12px;
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 100;
+            user-select: none;
+            box-sizing: border-box; 
+        }
+        
+        #ui-panel.minimized {
+            width: 48px; 
+            height: 48px;
+            padding: 0;
+            overflow: hidden;
+            left: 10px;
+        }
+
+        #toggle-btn {
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            min-height: 30px;
+        }
+        
+        .minimized #toggle-btn {
+            justify-content: center;
+            height: 48px;
+            margin-bottom: 0;
+        }
+
+        /* 主標題樣式：GLSL 著色器藝術與物理教學 */
+        h1 { 
+            margin: 0 0 5px 0; 
+            font-size: 1rem; 
+            color: #fff; 
+            letter-spacing: 0.5px; 
+            font-weight: 700;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            border-left: 3px solid #4af;
+            padding-left: 8px;
+        }
+
+        /* 副標題：參數控制 */
+        h2 { 
+            margin: 0; 
+            font-size: 0.85rem; 
+            color: #4af; 
+            letter-spacing: 1px; 
+            font-weight: 600; 
+            opacity: 0.9;
+        }
+
+        .minimized h1, .minimized h2, .minimized .style-row, .minimized .control-row { display: none; }
+
+        /* Grid 佈局 */
+        .control-row { 
+            display: grid;
+            grid-template-columns: 40px 25px 1fr 25px 55px; 
+            align-items: center;
+            gap: 8px; 
+            margin-bottom: 12px;
+            width: 100%;
+        }
+        
+        /* 風格選擇專用行 */
+        .style-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 10px 0 15px 0;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .style-row label { font-size: 0.85rem; color: #4af; font-weight: bold; flex: 0 0 40px; }
+        
+        /* 風格選單：紅色字體 */
+        .style-row select {
+            flex: 1;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: #ff4444; 
+            font-size: 0.9rem;
+            border-radius: 4px;
+            padding: 4px;
+            cursor: pointer;
+            outline: none;
+            font-weight: bold;
+        }
+
+        .control-row label { font-size: 0.85rem; color: #ddd; white-space: nowrap; }
+        .range-limit { font-size: 0.75rem; color: rgba(255, 255, 255, 0.4); font-family: monospace; text-align: center; }
+        .control-row input[type="range"] { width: 100%; height: 3px; cursor: pointer; accent-color: #4af; background: #444; border-radius: 2px; appearance: none; margin: 0; }
+
+        /* 數值輸入框：縮減 20% 字體 */
+        .control-row input[type="number"] {
+            width: 55px; 
+            background: rgba(255, 255, 255, 0.12); 
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            color: #fb0; 
+            font-size: 0.88rem; 
+            text-align: center; 
+            border-radius: 4px; 
+            padding: 5px 0;
+            font-family: 'Courier New', monospace; 
+            -moz-appearance: textfield; 
+            box-sizing: border-box;
+        }
+        
+        /* 隱藏／顯示三角形：放大 50% */
+        .icon { width: 27px; height: 27px; fill: currentColor; transition: transform 0.3s; color: #4af; }
+        .minimized .icon { transform: rotate(-90deg); }
+    </style>
+</head>
+<body>
+
+    <div id="ui-panel">
+        <div id="toggle-btn" onclick="toggleUI()">
+            <div style="display: flex; flex-direction: column;">
+                <h1>GLSL 著色器藝術與物理教學</h1>
+                <h2>參數控制</h2>
+            </div>
+            <svg class="icon" viewBox="0 0 24 24">
+                <path d="M7 10l5 5 5-5z"/>
+            </svg>
+        </div>
+
+        <div class="style-row">
+            <label>風格</label>
+            <select id="select-style">
+                <option value="0">霓虹虹彩 (Neon)</option>
+                <option value="1">熱力影像 (Thermal)</option>
+                <option value="2">深海流體 (Ocean)</option>
+                <option value="3">單色干涉 (Laser)</option>
+            </select>
+        </div>
+        
+        <div class="control-row">
+            <label>縮放</label>
+            <span class="range-limit">.1</span>
+            <input type="range" id="range-scale" min="0.1" max="2.0" step="0.01" value="0.3">
+            <span class="range-limit">2</span>
+            <input type="number" id="num-scale" value="0.3" step="0.01">
+        </div>
+
+        <div class="control-row">
+            <label>複雜</label>
+            <span class="range-limit">1</span>
+            <input type="range" id="range-complex" min="1.0" max="25.0" step="1.0" value="10.0">
+            <span class="range-limit">25</span>
+            <input type="number" id="num-complex" value="10.0" step="1.0">
+        </div>
+
+        <div class="control-row">
+            <label>速流</label>
+            <span class="range-limit">0</span>
+            <input type="range" id="range-speed" min="0.0" max="5.0" step="0.1" value="1.0">
+            <span class="range-limit">5</span>
+            <input type="number" id="num-speed" value="1.0" step="0.1">
+        </div>
+
+        <div class="control-row">
+            <label>亮度</label>
+            <span class="range-limit">.2</span>
+            <input type="range" id="range-bright" min="0.2" max="3.0" step="0.1" value="1.0">
+            <span class="range-limit">3</span>
+            <input type="number" id="num-bright" value="1.0" step="0.1">
+        </div>
+
+        <div class="control-row">
+            <label>色彩</label>
+            <span class="range-limit">0</span>
+            <input type="range" id="range-hue" min="0.0" max="6.28" step="0.01" value="0.0">
+            <span class="range-limit">6.2</span>
+            <input type="number" id="num-hue" value="0.00" step="0.01">
+        </div>
+
+        <div class="control-row">
+            <label>不對</label>
+            <span class="range-limit">.1</span>
+            <input type="range" id="range-asym" min="0.1" max="3.0" step="0.01" value="1.0">
+            <span class="range-limit">3</span>
+            <input type="number" id="num-asym" value="1.00" step="0.01">
+        </div>
+    </div>
+
+    <canvas id="glCanvas"></canvas>
+
+    <script id="vs" type="x-shader/x-vertex">
+        attribute vec2 position;
+        void main() { gl_Position = vec4(position, 0.0, 1.0); }
+    </script>
+
+    <script id="fs" type="x-shader/x-fragment">
+        precision highp float;
+        uniform vec2 u_resolution;
+        uniform float u_time;
+        uniform float u_scale;
+        uniform float u_complexity;
+        uniform float u_speed;
+        uniform float u_brightness;
+        uniform float u_hue;
+        uniform float u_asym;
+        uniform float u_color_mode;
+
+        vec4 fast_tanh(vec4 x) {
+            vec4 exp2x = exp(2.0 * x);
+            return (exp2x - 1.0) / (exp2x + 1.0);
+        }
+
+        void main() {
+            vec2 r = u_resolution;
+            float t = u_time * u_speed;
+            vec2 p = (gl_FragCoord.xy * 2.0 - r) / r.y / u_scale;
+            p.x *= u_asym;
+            
+            vec4 o = vec4(0.0);
+            float energy = 0.0;
+            vec2 v;
+            
+            for(float i = 0.0; i < 25.0; i++) {
+                if(i >= u_complexity) break;
+                v = p;
+                for(float f = 1.0; f < 10.0; f++) {
+                    v += sin(v.yx * f + i + r.x/r.y + t) / f;
+                    v.x += cos(v.y * u_asym + t) * 0.1;
+                }
+                float l = length(v);
+                if (u_color_mode < 0.5) {
+                    vec4 colorShift = vec4(0.0, 1.0, 2.0, 3.0) + u_hue;
+                    o += (cos(i + colorShift) + 1.0) / (6.0 / u_brightness) / l;
+                } else {
+                    energy += 1.0 / l;
+                }
+            }
+            if (u_color_mode > 0.5) {
+                energy = energy * u_brightness * 0.15;
+                if (u_color_mode < 1.5) {
+                    o.r = energy; o.g = energy * energy * 0.5; o.b = energy * energy * energy * 0.2;
+                } else if (u_color_mode < 2.5) {
+                    o.b = energy; o.g = energy * 0.5; o.r = energy * 0.1;
+                } else {
+                    vec3 baseColor = 0.5 + 0.5 * cos(u_hue + vec3(0,2,4));
+                    o.rgb = baseColor * energy;
+                }
+            }
+            o = fast_tanh(o * o);
+            gl_FragColor = vec4(o.rgb, 1.0);
+        }
+    </script>
+
+    <script>
+        function toggleUI() {
+            document.getElementById('ui-panel').classList.toggle('minimized');
+        }
+
+        const canvas = document.getElementById('glCanvas');
+        const gl = canvas.getContext('webgl');
+        const selectStyle = document.getElementById('select-style');
+
+        const params = ['scale', 'complex', 'speed', 'bright', 'hue', 'asym'];
+        const state = { colorMode: 0 };
+
+        params.forEach(p => {
+            const rEl = document.getElementById(`range-${p}`);
+            const nEl = document.getElementById(`num-${p}`);
+            state[p] = parseFloat(rEl.value);
+
+            rEl.addEventListener('input', () => { nEl.value = rEl.value; state[p] = parseFloat(rEl.value); });
+            nEl.addEventListener('input', () => {
+                let val = parseFloat(nEl.value) || 0;
+                const min = parseFloat(rEl.min), max = parseFloat(rEl.max);
+                if (val < min) val = min; if (val > max) val = max;
+                rEl.value = val; state[p] = val;
+            });
+        });
+
+        selectStyle.addEventListener('change', (e) => { state.colorMode = parseFloat(e.target.value); });
+
+        function createShader(gl, type, source) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(shader));
+            return shader;
+        }
+
+        try {
+            const program = gl.createProgram();
+            gl.attachShader(program, createShader(gl, gl.VERTEX_SHADER, document.getElementById('vs').text));
+            gl.attachShader(program, createShader(gl, gl.FRAGMENT_SHADER, document.getElementById('fs').text));
+            gl.linkProgram(program);
+            gl.useProgram(program);
+
+            const vertices = new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]);
+            const buffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+            gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+
+            const posLoc = gl.getAttribLocation(program, 'position');
+            gl.enableVertexAttribArray(posLoc);
+            gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+
+            const uniforms = {
+                res: gl.getUniformLocation(program, 'u_resolution'),
+                time: gl.getUniformLocation(program, 'u_time'),
+                scale: gl.getUniformLocation(program, 'u_scale'),
+                complex: gl.getUniformLocation(program, 'u_complexity'),
+                speed: gl.getUniformLocation(program, 'u_speed'),
+                bright: gl.getUniformLocation(program, 'u_brightness'),
+                hue: gl.getUniformLocation(program, 'u_hue'),
+                asym: gl.getUniformLocation(program, 'u_asym'),
+                colorMode: gl.getUniformLocation(program, 'u_color_mode')
+            };
+
+            function resize() {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+                gl.viewport(0, 0, canvas.width, canvas.height);
+            }
+            window.addEventListener('resize', resize);
+            resize();
+
+            function render(time) {
+                gl.uniform2f(uniforms.res, canvas.width, canvas.height);
+                gl.uniform1f(uniforms.time, time * 0.001);
+                gl.uniform1f(uniforms.scale, state.scale);
+                gl.uniform1f(uniforms.complex, state.complex);
+                gl.uniform1f(uniforms.speed, state.speed);
+                gl.uniform1f(uniforms.bright, state.bright);
+                gl.uniform1f(uniforms.hue, state.hue);
+                gl.uniform1f(uniforms.asym, state.asym);
+                gl.uniform1f(uniforms.colorMode, state.colorMode);
+
+                gl.drawArrays(gl.TRIANGLES, 0, 6);
+                requestAnimationFrame(render);
+            }
+            requestAnimationFrame(render);
+        } catch (e) { console.error(e); }
+    </script>
+</body>
+</html>
